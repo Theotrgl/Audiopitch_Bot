@@ -6,9 +6,12 @@ from apikeys import BOT_TOKEN
 
 client = commands.Bot(command_prefix='!', intents=discord.Intents.all())
 
+MAX_ROLES_PER_MEMBER = 1
+
 @client.event
 async def on_ready():
     print("Bot is Online...")
+    print("...................")
 
 # Hello Command
 @client.command()
@@ -66,18 +69,37 @@ async def ban_error(ctx, error):
         await ctx.send("You don't have permission to ban people!")
 
 @client.command()
-@has_permissions(manage_roles=True)
-async def addRole(ctx, user: discord.Member, *, role: discord.Role):
-    if role in user.roles:
-        await ctx.send(f"{user.mention} already has the role {role}.")
-    else:
-        await user.add_roles(role)
-        await ctx.send(f"Added {role} to {user.mention}.")
+async def assign_role(ctx, *, role_name):
+    member = ctx.author
+    roles = member.roles[1:]  # Exclude @everyone role
 
-@addRole.error
-async def role_error(ctx, error):
-    if isinstance(error, commands.MissingPermissions):
-        await ctx.send("You do not have permission to use this command.")
+    if len(roles) >= MAX_ROLES_PER_MEMBER:
+        await ctx.send(f"You've reached the maximum limit of roles ({MAX_ROLES_PER_MEMBER}).")
+        return
+
+    role = discord.utils.get(ctx.guild.roles, name=role_name)
+    if role:
+        if role in roles:
+            await ctx.send(f"You already have the {role_name} role.")
+        else:
+            await member.add_roles(role)
+            await ctx.send(f"You've been assigned the {role_name} role.")
+    else:
+        await ctx.send(f"Role '{role_name}' not found.")
+    
+# @client.command()
+# @has_permissions(manage_roles=True)
+# async def addRole(ctx, user: discord.Member, *, role: discord.Role):
+#     if role in user.roles:
+#         await ctx.send(f"{user.mention} already has the role {role}.")
+#     else:
+#         await user.add_roles(role)
+#         await ctx.send(f"Added {role} to {user.mention}.")
+
+# @addRole.error
+# async def role_error(ctx, error):
+#     if isinstance(error, commands.MissingPermissions):
+#         await ctx.send("You do not have permission to use this command.")
 
 @client.command()
 @has_permissions(manage_roles=True)
