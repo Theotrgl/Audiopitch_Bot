@@ -22,8 +22,14 @@ async def Hello(ctx):
 @client.event
 async def on_member_join(member):
     channel = client.get_channel(1168399261172502571)
-    await channel.send(f"<@{member.id}> has joined the server! Welcome to our community!")
-
+    if member.bot:
+        await channel.send("Bots cannot receive DM's!!")
+        return
+    try:
+        await member.send("To register yourself as an Artist or Curator please type the following commands in the specified text channel: \n \n'!assign_role Artist' for Artists \n '!assign_role Curator' for Curators. \n \n If you're encounterring difficulties, please contact our admins in the server.")
+        await channel.send(f"Welcome to the Audiopitch server <@{member.id}>, we hope you'll enjoy it here!! Please check your DM's for role assignment.")
+    except discord.Forbidden:
+        await channel.send(f"Couldn't send a message to <@{member.id}>. Please make sure your DMs are open.")
 # Leave Message
 @client.event
 async def on_member_remove(member):
@@ -86,20 +92,24 @@ async def assign_role(ctx, *, role_name):
             await ctx.send(f"You've been assigned the {role_name} role.")
     else:
         await ctx.send(f"Role '{role_name}' not found.")
+@assign_role.error
+async def assign_role_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("You don't have permissions to use this command.")
     
-# @client.command()
-# @has_permissions(manage_roles=True)
-# async def addRole(ctx, user: discord.Member, *, role: discord.Role):
-#     if role in user.roles:
-#         await ctx.send(f"{user.mention} already has the role {role}.")
-#     else:
-#         await user.add_roles(role)
-#         await ctx.send(f"Added {role} to {user.mention}.")
+@client.command()
+@has_permissions(manage_roles=True)
+async def addRole(ctx, user: discord.Member, *, role: discord.Role):
+    if role in user.roles:
+        await ctx.send(f"{user.mention} already has the role {role}.")
+    else:
+        await user.add_roles(role)
+        await ctx.send(f"Added {role} to {user.mention}.")
 
-# @addRole.error
-# async def role_error(ctx, error):
-#     if isinstance(error, commands.MissingPermissions):
-#         await ctx.send("You do not have permission to use this command.")
+@addRole.error
+async def role_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("You do not have permission to use this command.")
 
 @client.command()
 @has_permissions(manage_roles=True)
