@@ -1,6 +1,8 @@
 import discord
+import json
 from discord.ext import commands, tasks
 from discord.ext.commands import has_permissions, MissingPermissions
+
 
 from apikeys import BOT_TOKEN
 
@@ -18,25 +20,20 @@ async def on_ready():
 async def Hello(ctx):
     await ctx.send("Hello, I am the Audiopitch bot.")
 
+#GREETINGS AND LEAVE PROMPT
 # Join Message
 @client.event
 async def on_member_join(member):
-    channel = client.get_channel(1168399261172502571)
+    channel = client.get_channel(1168815727516590081)
     await channel.send(f"Welcome To The Audidopitch Server <@{member.id}>, We hope you'll enjoy it here. \n\n To get a list of commands please refer to the [] text-channel!!")
-    # if member.bot:
-    #     await channel.send("Bots cannot receive DM's!!")
-    #     return
-    # try:
-    #     await member.send("To register yourself as an Artist or Curator please type the following commands in the specified text channel: \n \n'!assign_role Artist' for Artists \n '!assign_role Curator' for Curators. \n \n If you're encounterring difficulties, please contact our admins in the server.")
-    #     await channel.send(f"Welcome to the Audiopitch server <@{member.id}>, we hope you'll enjoy it here!! Please check your DM's for role assignment.")
-    # except discord.Forbidden:
-    #     await channel.send(f"Couldn't send a message to <@{member.id}>. Please make sure your DMs are open.")
+
 # Leave Message
 @client.event
 async def on_member_remove(member):
-    channel = client.get_channel(1168399261172502571)
+    channel = client.get_channel(1168815727516590081)
     await channel.send(f"<@{member.id}> has left the server, sad to see you go.")
 
+#KICK AND BAN FUNCTIONS
 @client.command()
 @has_permissions(kick_members=True)
 async def Kick(ctx, member: discord.Member, *, reason=None):
@@ -121,7 +118,7 @@ async def role_pick_error(ctx, error):
     if isinstance(error, commands.MissingPermissions):
         await ctx.send("You don't have permissions to use this command.")
 
-    
+#ROLE ADDING AND REMOVING FOR MODS
 @client.command()
 @has_permissions(manage_roles=True)
 async def addRole(ctx, user: discord.Member, *, role: discord.Role):
@@ -149,5 +146,33 @@ async def removeRole(ctx, user: discord.Member, *, role: discord.Role):
 async def removeRole_error(ctx, error):
     if isinstance(error, commands.MissingPermissions):
         await ctx.send("You do not have permission to use this command.")
+
+
+#COIN SYSTEM
+try:
+    with open('user_balances.json', 'r') as file:
+        user_balances = json.load(file)
+except FileNotFoundError:
+    # If the file doesn't exist yet, create an empty balance dictionary
+    user_balances = {}
+
+@client.command()
+async def check_balance(ctx):
+    user_id = str(ctx.author.id)
+    if user_id in user_balances:
+        await ctx.send(f"Your balance is {user_balances[user_id]} coins.", ephemeral=True)
+    else:
+        await ctx.send("You don't have any coins yet.", ephemeral=True)
+
+@client.command()
+async def buy_coins(ctx, amount: int):
+    user_id = str(ctx.author.id)
+    if user_id not in user_balances:
+        user_balances[user_id] = 0
+    user_balances[user_id] += amount
+
+    # Save the updated balances to the file
+    with open('user_balances.json', 'w') as file:
+        json.dump(user_balances, file)
 
 client.run(BOT_TOKEN)
