@@ -107,15 +107,30 @@ async def on_raw_reaction_add(payload):
                 role = discord.utils.get(guild.roles, name="Artist")
             elif str(payload.emoji) == '🔍':  # Curator emoji
                 role = discord.utils.get(guild.roles, name="Pending")
+                if role:
+                    await member.add_roles(role)
+                    if role.name == 'Pending':
+                        # For 'Pending' role, send additional steps message
+                        await member.send(f"Choosing the Curator role requires additional steps. Please refer to the designated channel.")
+                        
+                        # Notify moderators in a separate channel
+                        mod_channel = guild.get_channel(1168806364697608303)  # Replace MODERATOR_CHANNEL_ID with the actual channel ID
+                        if mod_channel:
+                            mods = discord.utils.get(guild.roles, name="kont")  # Assuming there is a role named "Moderators"
+                            if mods:
+                                await mod_channel.send(f"{member.mention} applied for the Curator role. Please review. {mods.mention}")
+                            else:
+                                print("Moderators role not found.")
+                        else:
+                            print("Moderator channel not found.")
+                    else:
+                        await member.send(f"You've been assigned the {role.name} role.")
 
-            if role:
-                await member.add_roles(role)
-                await member.send(f"You've been assigned the {role.name} role.")
+                    selected_roles[user_id] = role.name  # Store the user and their selected role
+                    save_selected_roles(selected_roles)  # Save the updated data to the JSON file
+                else:
+                    print("Role not found.")  # Handle role not found scenario
 
-                selected_roles[user_id] = role.name  # Store the user and their selected role
-                save_selected_roles(selected_roles)  # Save the updated data to the JSON file
-            else:
-                print("Role not found.")  # Handle role not found scenario
 
 
 #ROLE ADDING AND REMOVING FOR MODS
@@ -144,19 +159,14 @@ async def addRole_error(ctx, error):
 @client.command()
 @has_permissions(manage_roles=True)
 async def removeRole(ctx, user: discord.Member, *, role: discord.Role):
-    print("test 1")
     user_id = str(user.id)
     
     if role in user.roles:
-        print("test 2")
         await user.remove_roles(role)
         await ctx.send(f"Removed {role} from {user.mention}.")
-        
-        print("test 3")
 
         # Update selected_roles data
         if user_id in selected_roles and role.name in selected_roles[user_id]:
-            print("test 4")
             del selected_roles[user_id]
             print(f"Role {role.name} removed from {user_id} in the JSON file.")
             save_selected_roles(selected_roles)
