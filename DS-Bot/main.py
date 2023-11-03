@@ -1,5 +1,6 @@
 import discord
 import json
+import asyncio
 from discord.ext import commands, tasks
 from discord.ext.commands import has_permissions, MissingPermissions
 
@@ -93,18 +94,22 @@ selected_roles = load_selected_roles()
 async def on_raw_reaction_add(payload):
     global role_message_id
     channel = client.get_channel(payload.channel_id)
+
     if channel.id == 1168815727516590081:  # Check if the reaction is in the specific channel
         guild = client.get_guild(payload.guild_id)
         member = guild.get_member(payload.user_id)
         user_id = str(member.id)
 
-        if user_id in selected_roles:
-            # User has already selected a role, prevent any additional changes
-            return
-
         if payload.message_id == role_message_id:
             if str(payload.emoji) == '🎨':  # Artist emoji
                 role = discord.utils.get(guild.roles, name="Artist")
+                if role:
+                    await member.add_roles(role)
+                    await member.send(f"You've been assigned the {role.name} role.")
+                    selected_roles[user_id] = role.name
+                    save_selected_roles(selected_roles)
+                else:
+                    print("Role not found.")  # Handle role not found scenario
             elif str(payload.emoji) == '🔍':  # Curator emoji
                 role = discord.utils.get(guild.roles, name="Pending")
                 if role:
@@ -125,9 +130,9 @@ async def on_raw_reaction_add(payload):
                             print("Moderator channel not found.")
                     else:
                         await member.send(f"You've been assigned the {role.name} role.")
-
-                    selected_roles[user_id] = role.name  # Store the user and their selected role
-                    save_selected_roles(selected_roles)  # Save the updated data to the JSON file
+                    
+                    selected_roles[user_id] = role.name
+                    save_selected_roles(selected_roles)
                 else:
                     print("Role not found.")  # Handle role not found scenario
 
@@ -185,6 +190,17 @@ async def removeRole_error(ctx, error):
 
 
 #COIN SYSTEM
+def load_user_balances():
+    try:
+        with open("user_balances.json", "r") as file:
+            return json.load(file)
+    except FileNotFoundError:
+        return {}
+
+# Save selected roles to JSON file
+def save_user_balances(selected_roles):
+    with open('user_balances.json', 'w') as file:
+        json.dump(selected_roles, file)
 try:
     with open('user_balances.json', 'r') as file:
         user_balances = json.load(file)
@@ -210,5 +226,67 @@ async def buy_coins(ctx, amount: int):
     # Save the updated balances to the file
     with open('user_balances.json', 'w') as file:
         json.dump(user_balances, file)
+
+#SUBMISSION HANDLING
+@client.command()
+async def submit_application(ctx, curator: discord.User):
+    # Create temporary channel
+    overwrites = {
+        ctx.guild.default_role: discord.PermissionOverwrite(read_messages=False),
+        ctx.guild.me: discord.PermissionOverwrite(read_messages=True),
+        ctx.author: discord.PermissionOverwrite(read_messages=True),
+        curator: discord.PermissionOverwrite(read_messages=True)
+    }
+    channel = await ctx.guild.create_text_channel('application', overwrites=overwrites)
+    
+    # Start the application process
+    await channel.send(f"Application started! Please answer the following questions.")
+    
+    def check_author(message):
+        return message.author == ctx.author and message.channel == channel
+    
+    # Ask questions one at a time
+    questions = [
+        "What's your inspiration?",
+        "What mediums do you use?",
+        "Tell us about your experience."
+    ]
+    
+    answers = []
+    for question in questions:
+        await channel.send(question)
+        answer = await client.wait_for('message', check=check_author)
+        answers.append(answer.content)
+
+    # Notify mods and tagged curator
+    mod_channel = ctx.guild.get_channel(1169964747156893716)  # Replace with your channel ID
+    if mod_channel:
+        await mod_channel.send(f"{curator.mention}, {ctx.author.mention} has submitted their application.")
+    else:
+        print("Moderator channel not found.")
+
+    # Inform the tagged curator
+    await channel.send(f"{curator.mention}, your input has been requested. Check the information submitted by {ctx.author.mention}.")
+
+     # Prepare the answers for the moderator channel
+    answers_summary = "\n".join(answers)
+    mod_channel = ctx.guild.get_channel(1169964747156893716)  # Replace with your actual channel ID
+    if mod_channel:
+        await mod_channel.send(f"{ctx.author.mention}'s answers:\n{answers_summary}")
+    else:
+        print("Moderator channel not found.")
+
+     # Deduct 1 coin from the artist's balance
+    user_id = str(ctx.author.id)
+    if user_id in user_balances:
+        user_balances[user_id] -= 1  # Deduct 1 coin
+        save_user_balances()
+    else:
+        print("User balance not found.")
+
+    await asyncio.sleep(600)
+    
+    # Delete the temporary channel
+    await channel.delete()
 
 client.run(BOT_TOKEN)
