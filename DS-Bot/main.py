@@ -3,6 +3,7 @@ import json
 import asyncio
 from discord.ext import commands, tasks
 from discord.ext.commands import has_permissions, MissingPermissions
+from discord.ext.commands import has_role
 
 
 from apikeys import BOT_TOKEN
@@ -30,6 +31,20 @@ async def on_ready():
     await role_message.add_reaction("🔍")  # Curator emoji
 
     role_message_id = role_message.id 
+
+def has_required_role(role_name):
+    async def predicate(ctx):
+        # Retrieve the guild and the user
+        guild = ctx.guild
+        user = ctx.author
+
+        # Get the required role object
+        required_role = discord.utils.get(guild.roles, name=role_name)
+
+        # Check if the user has the required role
+        return required_role in user.roles
+
+    return commands.check(predicate)
 
 # Hello Command
 @client.command()
@@ -150,10 +165,7 @@ async def addRole(ctx, user: discord.Member, *, role: discord.Role):
 
         # Update selected_roles data
         user_id = str(user.id)
-        if user_id not in selected_roles:
-            selected_roles[user_id] = []
-
-        selected_roles[user_id].append(role.name)
+        selected_roles[user_id] = role.name  # Store the user's selected role directly
         save_selected_roles(selected_roles)
 
 @addRole.error
@@ -284,9 +296,25 @@ async def submit_application(ctx, curator: discord.User):
     else:
         print("User balance not found.")
 
-    await asyncio.sleep(600)
+    await asyncio.sleep(60)
     
     # Delete the temporary channel
     await channel.delete()
+
+#CURATOR CONFIRMATION
+@client.command()
+@has_required_role("Curator")
+async def share_song(ctx, artist: discord.User, playlist_link: str):
+    # Replace CHANNEL_ID with the specific channel ID where the link will be forwarded
+    target_channel = client.get_channel(1170291523234041916)
+
+    # Forward the playlist link to the target channel
+    await target_channel.send(f"The song has been shared: {playlist_link}. Tagging {artist.mention} for notification.")
+
+    # Notify the artist about the shared song
+    await ctx.send(f"You've successfully shared the song. The artist has been notified.")
+    await artist.send(f"Your song has been shared. Check it out here: {playlist_link}")
+
+    # You can perform further actions or logging as needed
 
 client.run(BOT_TOKEN)
