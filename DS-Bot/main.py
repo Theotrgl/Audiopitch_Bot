@@ -8,10 +8,18 @@ from discord.ext.commands import has_role
 
 from apikeys import BOT_TOKEN
 
-client = commands.Bot(command_prefix='!', intents=discord.Intents.all())
+client = commands.Bot(command_prefix='/', intents=discord.Intents.all())
 
 MAX_ROLES_PER_MEMBER = 1
 role_message_id = None
+
+mods = "AudioPitch Team"
+mod_channel = 1168550607867629659
+submission_info_channel = 1167865127660433498
+general_roles = 1167862425333284895
+welcome = 1170634241894252564
+audio_coins = 1167865516602429460
+songs_to_share = 1167864257690489026
 
 @client.event
 async def on_ready():
@@ -20,14 +28,14 @@ async def on_ready():
     print("...................")
 
     # Fetch the channel where you want to send the role selection message
-    channel = client.get_channel(1168815727516590081)
+    channel = client.get_channel(general_roles)
 
     role_message = await channel.send("React to assign yourself a role!\n\n"
                                       "Artist - :artist:\n"
                                       "Curator - :curator:")
 
     # Add reactions to the message
-    await role_message.add_reaction("🎨")  # Artist emoji
+    await role_message.add_reaction("🎵")  # Artist emoji
     await role_message.add_reaction("🔍")  # Curator emoji
 
     role_message_id = role_message.id 
@@ -50,26 +58,26 @@ def has_required_role(role_name):
 @client.command()
 async def Hello(ctx):
     await ctx.send("Hello, I am the Audiopitch bot.")
-
 #GREETINGS AND LEAVE PROMPT
 # Join Message
 @client.event
 async def on_member_join(member):
-    channel = client.get_channel(1168815727516590081)
+    channel = client.get_channel(welcome)
     await channel.send(f"Welcome To The Audidopitch Server <@{member.id}>, We hope you'll enjoy it here. \n\n To get a list of commands please refer to the [] text-channel!!")
 
 # Leave Message
 @client.event
 async def on_member_remove(member):
-    channel = client.get_channel(1168815727516590081)
+    channel = client.get_channel(welcome)
     await channel.send(f"<@{member.id}> has left the server, sad to see you go.")
 
 #KICK AND BAN FUNCTIONS
 @client.command()
-@has_permissions(kick_members=True)
-async def Kick(ctx, member: discord.Member, *, reason=None):
+@has_required_role(mods)
+async def Kick(member: discord.Member, *, reason=None):
+    channel = client.get_channel(welcome)
     await member.kick(reason=reason)
-    await ctx.send(f"User {member} has been kicked.")
+    await channel.send(f"User {member} has been kicked.")
 
 @Kick.error
 async def kick_error(ctx, error):
@@ -77,10 +85,11 @@ async def kick_error(ctx, error):
         await ctx.send("You don't have permission to kick people!")
 
 @client.command()
-@has_permissions(ban_members=True)
-async def Ban(ctx, member: discord.Member, *, reason=None):
+@has_required_role(mods)
+async def Ban(member: discord.Member, *, reason=None):
+    channel = client.get_channel(welcome)
     await member.ban(reason=reason)
-    await ctx.send(f"User {member} has been banned.")
+    await channel.send(f"User {member} has been banned.")
 
 @Ban.error
 async def ban_error(ctx, error):
@@ -110,13 +119,13 @@ async def on_raw_reaction_add(payload):
     global role_message_id
     channel = client.get_channel(payload.channel_id)
 
-    if channel.id == 1168815727516590081:  # Check if the reaction is in the specific channel
+    if channel.id == general_roles:  # Check if the reaction is in the specific channel
         guild = client.get_guild(payload.guild_id)
         member = guild.get_member(payload.user_id)
         user_id = str(member.id)
 
         if payload.message_id == role_message_id:
-            if str(payload.emoji) == '🎨':  # Artist emoji
+            if str(payload.emoji) == '🎵':  # Artist emoji
                 role = discord.utils.get(guild.roles, name="Artist")
                 if role:
                     await member.add_roles(role)
@@ -126,7 +135,7 @@ async def on_raw_reaction_add(payload):
                 else:
                     print("Role not found.")  # Handle role not found scenario
             elif str(payload.emoji) == '🔍':  # Curator emoji
-                role = discord.utils.get(guild.roles, name="Pending")
+                role = discord.utils.get(guild.roles, name="Curator Pending")
                 if role:
                     await member.add_roles(role)
                     if role.name == 'Pending':
@@ -134,9 +143,9 @@ async def on_raw_reaction_add(payload):
                         await member.send(f"Choosing the Curator role requires additional steps. Please refer to the designated channel.")
                         
                         # Notify moderators in a separate channel
-                        mod_channel = guild.get_channel(1168806364697608303)  # Replace MODERATOR_CHANNEL_ID with the actual channel ID
+                        mod_channel = guild.get_channel(mod_channel)  # Replace MODERATOR_CHANNEL_ID with the actual channel ID
                         if mod_channel:
-                            mods = discord.utils.get(guild.roles, name="kont")  # Assuming there is a role named "Moderators"
+                            mods = discord.utils.get(guild.roles, name= mods)  # Assuming there is a role named "Moderators"
                             if mods:
                                 await mod_channel.send(f"{member.mention} applied for the Curator role. Please review. {mods.mention}")
                             else:
@@ -155,7 +164,7 @@ async def on_raw_reaction_add(payload):
 
 #ROLE ADDING AND REMOVING FOR MODS
 @client.command()
-@has_permissions(manage_roles=True)
+@has_required_role(mods)
 async def addRole(ctx, user: discord.Member, *, role: discord.Role):
     if role in user.roles:
         await ctx.send(f"{user.mention} already has the role {role}.")
@@ -174,7 +183,7 @@ async def addRole_error(ctx, error):
         await ctx.send("You do not have permission to use this command.")
 
 @client.command()
-@has_permissions(manage_roles=True)
+@has_required_role(mods)
 async def removeRole(ctx, user: discord.Member, *, role: discord.Role):
     user_id = str(user.id)
     
@@ -192,9 +201,6 @@ async def removeRole(ctx, user: discord.Member, *, role: discord.Role):
     else:
         await ctx.send(f"{user.mention} does not have the role {role}.")
 
-
-
-        
 @removeRole.error
 async def removeRole_error(ctx, error):
     if isinstance(error, commands.MissingPermissions):
@@ -222,18 +228,23 @@ except FileNotFoundError:
 
 @client.command()
 async def check_balance(ctx):
+    channel = client.get_channel(audio_coins)
     user_id = str(ctx.author.id)
+    user = ctx.author
+
     if user_id in user_balances:
-        await ctx.send(f"Your balance is {user_balances[user_id]} coins.", ephemeral=True)
+        await user.send(f"Your balance is {user_balances[user_id]} coins.")
     else:
-        await ctx.send("You don't have any coins yet.", ephemeral=True)
+        await user.send("You don't have any coins yet.")
 
 @client.command()
 async def buy_coins(ctx, amount: int):
+    channel = client.get_channel(audio_coins)
     user_id = str(ctx.author.id)
     if user_id not in user_balances:
         user_balances[user_id] = 0
     user_balances[user_id] += amount
+    await channel.send(f"Successfully added {amount} coins to your account, please check your balance by using the !check_balance command.")
 
     # Save the updated balances to the file
     with open('user_balances.json', 'w') as file:
@@ -241,29 +252,30 @@ async def buy_coins(ctx, amount: int):
 
 #SUBMISSION HANDLING
 @client.command()
-async def submit_application(ctx, curator: discord.User):
-    # Create temporary channel
+@has_required_role("Artist")
+
+async def submit_tracks(ctx, curator: discord.User):
+    # Create the first temporary channel for the artist
     overwrites = {
         ctx.guild.default_role: discord.PermissionOverwrite(read_messages=False),
         ctx.guild.me: discord.PermissionOverwrite(read_messages=True),
         ctx.author: discord.PermissionOverwrite(read_messages=True),
-        curator: discord.PermissionOverwrite(read_messages=True)
     }
     channel = await ctx.guild.create_text_channel('application', overwrites=overwrites)
-    
+
     # Start the application process
     await channel.send(f"Application started! Please answer the following questions.")
-    
+
     def check_author(message):
         return message.author == ctx.author and message.channel == channel
-    
+
     # Ask questions one at a time
     questions = [
-        "What's your inspiration?",
-        "What mediums do you use?",
-        "Tell us about your experience."
+        "Please provide your track link.",
+        "What is the genre of this song?",
+        "When is it released?"
     ]
-    
+
     answers = []
     for question in questions:
         await channel.send(question)
@@ -271,42 +283,98 @@ async def submit_application(ctx, curator: discord.User):
         answers.append(answer.content)
 
     # Notify mods and tagged curator
-    mod_channel = ctx.guild.get_channel(1169964747156893716)  # Replace with your channel ID
-    if mod_channel:
-        await mod_channel.send(f"{curator.mention}, {ctx.author.mention} has submitted their application.")
+    modChannel = ctx.guild.get_channel(mod_channel)  # Replace with your channel ID
+    submission_channel = ctx.guild.get_channel(submission_info_channel)
+    if modChannel:
+        await modChannel.send(f"{curator.mention}, {ctx.author.mention} has submitted their application.")
     else:
         print("Moderator channel not found.")
+    
+    if submission_channel:
+        await submission_channel.send(f"{ctx.author.mention}, We have successfully sent your track submission to {curator.mention}!!")
+    else:
+        print("Submission_info channel not found.")
 
     # Inform the tagged curator
     await channel.send(f"{curator.mention}, your input has been requested. Check the information submitted by {ctx.author.mention}.")
 
-     # Prepare the answers for the moderator channel
+    # Prepare the answers for the moderator channel
     answers_summary = "\n".join(answers)
-    mod_channel = ctx.guild.get_channel(1169964747156893716)  # Replace with your actual channel ID
-    if mod_channel:
-        await mod_channel.send(f"{ctx.author.mention}'s answers:\n{answers_summary}")
+    if modChannel:
+        await modChannel.send(f"{ctx.author.mention}'s answers:\n{answers_summary}")
     else:
         print("Moderator channel not found.")
 
-     # Deduct 1 coin from the artist's balance
+    # Deduct 1 coin from the artist's balance
     user_id = str(ctx.author.id)
     if user_id in user_balances:
         user_balances[user_id] -= 1  # Deduct 1 coin
-        save_user_balances()
+        save_user_balances(user_balances)
     else:
         print("User balance not found.")
 
-    await asyncio.sleep(60)
-    
-    # Delete the temporary channel
+    await asyncio.sleep(15)
+    # Delete the temporary channel for the artist
     await channel.delete()
+
+     # Second temporary channel for the curator
+    curator_overwrites = {
+        ctx.guild.default_role: discord.PermissionOverwrite(read_messages=False),
+        ctx.guild.me: discord.PermissionOverwrite(read_messages=True),
+        curator: discord.PermissionOverwrite(read_messages=True),
+    }
+    curator_channel = await ctx.guild.create_text_channel('curator-application', overwrites=curator_overwrites)
+    
+    await curator_channel.send(f"Hello {curator.mention}, please approve or decline this application using the reactions below.")
+
+    # Send the artist's answers to the curator's channel
+    message = await curator_channel.send(f"{ctx.author.mention}'s answers:\n{answers_summary}")
+    
+    # Add reactions for approval or decline
+    await message.add_reaction('✅')  # Approve
+    await message.add_reaction('❌')  # Decline
+
+    def curator_check(reaction, user):
+        return user == curator and reaction.message.channel == curator_channel
+    songs2share = ctx.guild.get_channel(songs_to_share)
+    try:
+        # Wait for a reaction from the curator
+        reaction, _ = await client.wait_for('reaction_add', check=curator_check, timeout=60)
+
+        if str(reaction.emoji) == '✅':  # Curator approved
+            await curator_channel.send("Application approved! Notifying the artist.")
+            # Notify the artist about approval
+            await submission_channel.send(f" {ctx.author.mention}, your application has been approved by @{curator}.")
+            await songs2share.send(f"{curator.mention}, you have approved to share @{ctx.author}'s track. please confirm by using the !shared command.")
+
+        elif str(reaction.emoji) == '❌':  # Curator declined
+            await curator_channel.send("Application declined! Provide feedback to the artist.")
+            # Ask the curator to provide feedback
+            await submission_channel.send(f"{ctx.author.mention}, your application has been declined by @{curator}. Please check your DMs for feedback.")
+            
+            def feedback_check(message):
+                return message.author == curator and message.channel == curator_channel
+
+            feedback = await client.wait_for('message', check=feedback_check)
+            # Forward the feedback to the artist's DM
+            await ctx.author.send(f"Feedback from {curator.mention}:\n{feedback.content}")
+
+            # Timer after the curator has provided feedback
+            await asyncio.sleep(15)
+            # Delete the temporary channel for the curator
+            await curator_channel.delete()
+            
+    except asyncio.TimeoutError:  # Curator didn't react in time
+        await curator_channel.send("Time's up. Application unprocessed.")
+
+
 
 #CURATOR CONFIRMATION
 @client.command()
 @has_required_role("Curator")
-async def share_song(ctx, artist: discord.User, playlist_link: str):
+async def shared(ctx, artist: discord.User, playlist_link: str):
     # Replace CHANNEL_ID with the specific channel ID where the link will be forwarded
-    target_channel = client.get_channel(1170291523234041916)
+    target_channel = client.get_channel(submission_info_channel)
 
     # Forward the playlist link to the target channel
     await target_channel.send(f"The song has been shared: {playlist_link}. Tagging {artist.mention} for notification.")
@@ -315,6 +383,31 @@ async def share_song(ctx, artist: discord.User, playlist_link: str):
     await ctx.send(f"You've successfully shared the song. The artist has been notified.")
     await artist.send(f"Your song has been shared. Check it out here: {playlist_link}")
 
-    # You can perform further actions or logging as needed
+@client.command()
+@has_required_role("Curator")
+async def cashout(ctx, amount: int):
+    user_id = str(ctx.author.id)
+    user= ctx.author
+
+    # Check the user's current balance
+    await check_balance(ctx)
+
+    if user_id in user_balances:
+        balance = user_balances[user_id]
+
+        if amount <= balance:
+            # Simulate a payment or currency conversion
+            price = amount * 2
+            paypal = 1924729712987192571
+            await user.send(f"Your AudioPitch coin cashout totals to ${price}, please send your payment to the following paypal account:\nPayPal Account Number: {paypal}.\nPlease send the receipt manually to []'s DM. Thank you!")
+
+            # Simulate deduction of coins
+            user_balances[user_id] -= amount
+            save_user_balances(user_balances)
+
+        else:
+            await ctx.send("Insufficient balance to cash out.")
+    else:
+        await ctx.send("User balance not found.")
 
 client.run(BOT_TOKEN)
