@@ -8,7 +8,7 @@ from discord.ext.commands import has_role
 
 from apikeys import BOT_TOKEN
 
-client = commands.Bot(command_prefix='/', intents=discord.Intents.all())
+client = commands.Bot(command_prefix='!', intents=discord.Intents.all())
 
 MAX_ROLES_PER_MEMBER = 1
 role_message_id = None
