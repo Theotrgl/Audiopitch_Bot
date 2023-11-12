@@ -261,7 +261,7 @@ async def submit_tracks(ctx, curator: discord.User):
         ctx.guild.me: discord.PermissionOverwrite(read_messages=True),
         ctx.author: discord.PermissionOverwrite(read_messages=True),
     }
-    channel = await ctx.guild.create_text_channel('application', overwrites=overwrites)
+    channel = await ctx.guild.create_text_channel('submission', overwrites=overwrites)
 
     # Start the application process
     await channel.send(f"Application started! Please answer the following questions.")
@@ -271,9 +271,9 @@ async def submit_tracks(ctx, curator: discord.User):
 
     # Ask questions one at a time
     questions = [
-        "Please provide your track link.",
+        "Please provide your spotify track link.",
         "What is the genre of this song?",
-        "When is it released?"
+        "Please give description.",
     ]
 
     answers = []
@@ -286,7 +286,7 @@ async def submit_tracks(ctx, curator: discord.User):
     modChannel = ctx.guild.get_channel(mod_channel)  # Replace with your channel ID
     submission_channel = ctx.guild.get_channel(submission_info_channel)
     if modChannel:
-        await modChannel.send(f"{curator.mention}, {ctx.author.mention} has submitted their application.")
+        await modChannel.send(f"{curator.mention}, {ctx.author.mention} has submitted their submission.")
     else:
         print("Moderator channel not found.")
     
@@ -323,9 +323,9 @@ async def submit_tracks(ctx, curator: discord.User):
         ctx.guild.me: discord.PermissionOverwrite(read_messages=True),
         curator: discord.PermissionOverwrite(read_messages=True),
     }
-    curator_channel = await ctx.guild.create_text_channel('curator-application', overwrites=curator_overwrites)
+    curator_channel = await ctx.guild.create_text_channel('curator-submission', overwrites=curator_overwrites)
     
-    await curator_channel.send(f"Hello {curator.mention}, please approve or decline this application using the reactions below.")
+    await curator_channel.send(f"Hello {curator.mention}, please approve or decline this submission using the reactions below.")
 
     # Send the artist's answers to the curator's channel
     message = await curator_channel.send(f"{ctx.author.mention}'s answers:\n{answers_summary}")
@@ -342,15 +342,15 @@ async def submit_tracks(ctx, curator: discord.User):
         reaction, _ = await client.wait_for('reaction_add', check=curator_check, timeout=60)
 
         if str(reaction.emoji) == '✅':  # Curator approved
-            await curator_channel.send("Application approved! Notifying the artist.")
+            await curator_channel.send("Submission approved! Notifying the artist.")
             # Notify the artist about approval
-            await submission_channel.send(f" {ctx.author.mention}, your application has been approved by @{curator}.")
+            await submission_channel.send(f" {ctx.author.mention}, your submission has been approved by @{curator}.")
             await songs2share.send(f"{curator.mention}, you have approved to share @{ctx.author}'s track. please confirm by using the !shared command.")
 
         elif str(reaction.emoji) == '❌':  # Curator declined
-            await curator_channel.send("Application declined! Provide feedback to the artist.")
+            await curator_channel.send("Submission declined! Provide feedback to the artist.")
             # Ask the curator to provide feedback
-            await submission_channel.send(f"{ctx.author.mention}, your application has been declined by @{curator}. Please check your DMs for feedback.")
+            await submission_channel.send(f"{ctx.author.mention}, your submission has been declined by @{curator}. Please check your DMs for feedback.")
             
             def feedback_check(message):
                 return message.author == curator and message.channel == curator_channel
@@ -365,7 +365,7 @@ async def submit_tracks(ctx, curator: discord.User):
             await curator_channel.delete()
             
     except asyncio.TimeoutError:  # Curator didn't react in time
-        await curator_channel.send("Time's up. Application unprocessed.")
+        await curator_channel.send("Time's up. Submission unprocessed.")
 
 
 
