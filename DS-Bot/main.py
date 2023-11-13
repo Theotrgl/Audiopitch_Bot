@@ -20,6 +20,9 @@ general_roles = 1167862425333284895
 welcome = 1170634241894252564
 audio_coins = 1167865516602429460
 songs_to_share = 1167864257690489026
+cashout = 1167864319497744394
+
+paypal = 1924729712987192571
 
 @client.event
 async def on_ready():
@@ -31,8 +34,8 @@ async def on_ready():
     channel = client.get_channel(general_roles)
 
     role_message = await channel.send("React to assign yourself a role!\n\n"
-                                      "Artist - :artist:\n"
-                                      "Curator - :curator:")
+                                      "Artist - 🎵\n"
+                                      "Curator - 🔍")
 
     # Add reactions to the message
     await role_message.add_reaction("🎵")  # Artist emoji
@@ -246,40 +249,53 @@ except FileNotFoundError:
 
 @client.command()
 async def check_balance(ctx):
+    await asyncio.sleep(5)
+    await ctx.message.delete()
     channel = client.get_channel(audio_coins)
     user_id = str(ctx.author.id)
     user = ctx.author
-
     if user_id in user_balances:
         await user.send(f"Your balance is {user_balances[user_id]} coins.")
     else:
         await user.send("You don't have any coins yet.")
-    
-    await asyncio.sleep(5)
-    await ctx.message.delete()
 
 @client.command()
 async def buy_coins(ctx, amount: int):
+    await asyncio.sleep(2)
+    await ctx.message.delete()
+    modChannel = client.get_channel(mod_channel)
     channel = client.get_channel(audio_coins)
     user_id = str(ctx.author.id)
+    overwrites = {
+        ctx.guild.default_role: discord.PermissionOverwrite(read_messages=False),
+        ctx.guild.me: discord.PermissionOverwrite(read_messages=True),
+        ctx.author: discord.PermissionOverwrite(read_messages=True),
+    }
+    temp_channel = await ctx.guild.create_text_channel('Submission', overwrites=overwrites)
+    await temp_channel.send(f"Please transfer your money to the following PayPal Account {paypal}")
+    
+    def payment_check(message):
+                return message.author == ctx.author and message.channel == temp_channel
+
+    response = await client.wait_for('message', check=payment_check, timeout=604800)
     if user_id not in user_balances:
         user_balances[user_id] = 0
     user_balances[user_id] += amount
-    await channel.send(f"Successfully added {amount} coins to your account, please check your balance by using the !check_balance command.")
-
+    await ctx.author.send(f"Successfully added {amount} coins to your account, please check your balance by using the !check_balance command.")
+    await modChannel.send(f"{ctx.author.mention} has purchased {amount} Coins, please check for purchase confirmation!!")
     # Save the updated balances to the file
     with open('user_balances.json', 'w') as file:
         json.dump(user_balances, file)
-    
-    await asyncio.sleep(5)
-    await ctx.message.delete()
+
+    await asyncio.sleep(10)
+    await temp_channel.delete()
 
 #SUBMISSION HANDLING
 @client.command()
 @has_required_role("Artist")
 
 async def submit_tracks(ctx, curator: discord.User):
-    await asyncio.sleep(5)
+    await asyncio.sleep(2)
     await ctx.message.delete()
     # Create the first temporary channel for the artist
     overwrites = {
@@ -290,12 +306,11 @@ async def submit_tracks(ctx, curator: discord.User):
     channel = await ctx.guild.create_text_channel('Submission', overwrites=overwrites)
 
     # Start the application process
-    await channel.send(f"{ctx.author.mention}, Private channel created! Please answer the following questions!")
+    await channel.send(f"{ctx.author.mention}, Private channel created! Please answer the following questions!\n\nIMPORTANT NOTE: If you want to cancel the submission please type in CANCEL in this text channel. Your Coins Hasn't been deducted yet at this point.")
 
-    def check_author(message):
-        return message.author == ctx.author and message.channel == channel
+    def check_author_and_cancel(message):
+        return message.author == ctx.author and ("CANCEL" in message.content.upper())
 
-    # Ask questions one at a time
     questions = [
         "Please provide your track link.",
         "What is the genre of this song?",
@@ -303,180 +318,223 @@ async def submit_tracks(ctx, curator: discord.User):
     ]
 
     answers = []
+    cancel_triggered = False
+
     for question in questions:
         await channel.send(question)
-        answer = await client.wait_for('message', check=check_author)
+        answer = await client.wait_for('message', check=check_author_and_cancel)
+        
+        if "CANCEL" in answer.content.upper():
+            await channel.send("Submission request has been cancelled, your coins has not been deducted yet.")
+            await modChannel.send(f"{ctx.author.name} has cancelled their track submission request for {curator.name}.")
+            cancel_triggered = True
+
+            break
+        
         answers.append(answer.content)
 
-    # Notify mods and tagged curator
-    modChannel = ctx.guild.get_channel(mod_channel)  # Replace with your channel ID
-    if modChannel:
-        await modChannel.send(f"{curator.mention}, {ctx.author.mention} has submitted their application.")
+    if cancel_triggered:
+        await asyncio.sleep(1)
+        await channel.delete()
     else:
-        print("Moderator channel not found.")
-    
-    submission_overwrites = {
-        ctx.guild.default_role: discord.PermissionOverwrite(read_messages=False),
-        ctx.guild.me: discord.PermissionOverwrite(read_messages=True),
-        ctx.author: discord.PermissionOverwrite(read_messages=True),
-    }
-    submission_channel = await ctx.guild.create_text_channel(f'{ctx.author.name}Submissions', overwrites=submission_overwrites)
 
-    if submission_channel:
-        await submission_channel.send(f"{ctx.author.mention}, We have successfully sent your track submission to {curator.mention}!!")
-    else:
-        print("Submission_info channel not found.")
+        # Notify mods and tagged curator
+        modChannel = ctx.guild.get_channel(mod_channel)  # Replace with your channel ID
+        if modChannel:
+            await modChannel.send(f"{ctx.author.mention} has filed a submitted a track to {curator.mention}, awaiting confirmation from {ctx.author.mention}.")
+        else:
+            print("Moderator channel not found.")
+        
+        submission_overwrites = {
+            ctx.guild.default_role: discord.PermissionOverwrite(read_messages=False),
+            ctx.guild.me: discord.PermissionOverwrite(read_messages=True),
+            ctx.author: discord.PermissionOverwrite(read_messages=True),
+        }
+        submission_channel = await ctx.guild.create_text_channel(f'{ctx.author.name}-Curator-Submission', overwrites=submission_overwrites)
 
-    # Inform the tagged curator
-    await channel.send(f"{curator.mention}, your input has been requested. Check the information submitted by {ctx.author.mention}.")
+        if submission_channel:
+            await submission_channel.send(f"{ctx.author.mention}, We have successfully sent your track submission to {curator.mention}!!")
+        else:
+            print("Submission_info channel not found.")
 
-    # Prepare the answers for the moderator channel
-    answers_summary = "\n".join(answers)
-    if modChannel:
-        await modChannel.send(f"{ctx.author.mention}'s answers:\n{answers_summary}")
-    else:
-        print("Moderator channel not found.")
+        # Inform the tagged curator
+        await channel.send(f"{curator.mention}, your input has been requested. Check the information submitted by {ctx.author.mention}.")
 
-    # Deduct 1 coin from the artist's balance
-    user_id = str(ctx.author.id)
-    if user_id in user_balances:
-        user_balances[user_id] -= 1  # Deduct 1 coin
-        save_user_balances(user_balances)
-    else:
-        print("User balance not found.")
+        answers_summary = "\n".join(answers)
 
-    await asyncio.sleep(10)
-    # Delete the temporary channel for the artist
-    await channel.delete()
+        # Deduct 1 coin from the artist's balance
+        user_id = str(ctx.author.id)
+        if user_id in user_balances:
+            user_balances[user_id] -= 1  # Deduct 1 coin
+            save_user_balances(user_balances)
+        else:
+            print("User balance not found.")
 
-     # Second temporary channel for the curator
-    curator_overwrites = {
-        ctx.guild.default_role: discord.PermissionOverwrite(read_messages=False),
-        ctx.guild.me: discord.PermissionOverwrite(read_messages=True),
-        curator: discord.PermissionOverwrite(read_messages=True),
-    }
-    curator_channel = await ctx.guild.create_text_channel(f'submission {curator.name}', overwrites=curator_overwrites)
-    
-    await curator_channel.send(f"Hello {curator.mention}, please approve or decline this application using the reactions below.")
+        await asyncio.sleep(10)
+        # Delete the temporary channel for the artist
+        await channel.delete()
 
-    # Send the artist's answers to the curator's channel
-    message = await curator_channel.send(f"{ctx.author.mention}'s answers:\n{answers_summary}")
-    
-    # Add reactions for approval or decline
-    await message.add_reaction('✅')  # Approve
-    await message.add_reaction('❌')  # Decline
+        # Second temporary channel for the curator
+        curator_overwrites = {
+            ctx.guild.default_role: discord.PermissionOverwrite(read_messages=False),
+            ctx.guild.me: discord.PermissionOverwrite(read_messages=True),
+            curator: discord.PermissionOverwrite(read_messages=True),
+        }
+        curator_channel = await ctx.guild.create_text_channel(f'submission {curator.name}', overwrites=curator_overwrites)
+        
+        await curator_channel.send(f"Hello {curator.mention}, {ctx.author.mention} has filed a track submission for you, please approve or decline this application using the reactions below.")
 
-    def curator_check(reaction, user):
-        return user == curator and reaction.message.channel == curator_channel
-    songs2share = ctx.guild.get_channel(songs_to_share)
-    try:
-        # Wait for a reaction from the curator
-        reaction, _ = await client.wait_for('reaction_add', check=curator_check, timeout=9999999999)
+        # Send the artist's answers to the curator's channel
+        message = await curator_channel.send(f"Here are {ctx.author.mention}'s track data:\n{answers_summary}")
+        
+        # Add reactions for approval or decline
+        await message.add_reaction('✅')  # Approve
+        await message.add_reaction('❌')  # Decline
 
-        if str(reaction.emoji) == '✅':  # Curator approved
-            await curator_channel.send("Application approved! Notifying the artist.")
-            # Notify the artist about approval
-            await submission_channel.send(f" {ctx.author.mention}, your application has been approved by @{curator}.")
-            await songs2share.send(f"{curator.mention}, you have approved to share @{ctx.author}'s track. Please confirm by using the !shared command.")
+        def curator_check(reaction, user):
+            return user == curator and reaction.message.channel == curator_channel
+        songstoshare = {
+            ctx.guild.default_role: discord.PermissionOverwrite(read_messages=False),
+            ctx.guild.me: discord.PermissionOverwrite(read_messages=True),
+            curator: discord.PermissionOverwrite(read_messages=True),
+        }
+        try:
+            # Wait for a reaction from the curator
+            reaction, _ = await client.wait_for('reaction_add', check=curator_check, timeout=604800)
 
-            # Wait for the curator's response to the !shared command
-            def shared_check(message):
-                return message.author == curator and message.content.startswith('!shared')
+            if str(reaction.emoji) == '✅':  # Curator approved
+                await curator_channel.send("Application approved! Notifying the artist.")
+                # Notify the artist about approval
+                await submission_channel.send(f" {ctx.author.mention}, your application has been approved by @{curator}.")
+                
+                songs2share = await ctx.guild.create_text_channel(f'submission {curator.name}', overwrites=songstoshare)
+                await songs2share.send(f"{curator.mention}, you have approved to share @{ctx.author}'s track. Please confirm by sending the link to your playlist here.")
 
-            curator_response = await client.wait_for('message', check=shared_check, timeout=9999999999)
+                # Wait for the curator's response to share the link
+                def link_check(message):
+                    return message.author == curator and message.channel == songs2share
 
-            await asyncio.sleep(10)
+                curator_response = await client.wait_for('message', check=link_check, timeout=604800)
 
-            # Delete the temporary channel for the curator  
-            await curator_channel.delete()
-            curator_id = str(curator.id)
-            if curator_id in user_balances:
-                user_balances[curator_id] += 1  # Deduct 1 coin
+                curator_id = str(curator.id)
+                if curator_id in user_balances:
+                    user_balances[curator_id] += 1  # Add 1 coin to Curator's balance
+                    save_user_balances(user_balances)
+                    await curator.send(f"Successfully Added 1 coin to your account from a successful transaction with {ctx.author.name}")
+                else:
+                    print("User's balance not found.")
+                    if modChannel:
+                        await modChannel.send(f"{ctx.author.mention}'s Request has been accepted by {curator.mention}, Here are the track's metadata:\n{answers_summary}")
+                    else:
+                        print("Moderator channel not found.")
+                # Timer after the curator has provided feedback
+                await asyncio.sleep(10)
+                # Delete the temporary channel for the curator
+                await curator_channel.delete()
+                await songs2share.delete()
+                await submission_channel.delete()
+
+            elif str(reaction.emoji) == '❌':  # Curator declined
+                await curator_channel.send("Application declined! Provide feedback to the artist.")
+                # Ask the curator to provide feedback
+                await submission_channel.send(f"{ctx.author.mention}, your application has been declined by @{curator}. Please wait for {curator.name}'s feedback.")
+                
+                def feedback_check(message):
+                    return message.author == curator and message.channel == curator_channel
+
+                feedback = await client.wait_for('message', check=feedback_check)
+                # Forward the feedback to the artist's DM
+                await submission_channel.send(f"Feedback from {curator.mention}:\n{feedback.content}")
+                # Timer after the curator has provided feedback
+                await asyncio.sleep(10)
+                # Delete the temporary channel for the curator
+                await curator_channel.delete()
+                await submission_channel.delete()
+                
+        except asyncio.TimeoutError:  # Curator didn't react in time
+            await curator_channel.send("Time's up. Application unprocessed.")
+            if user_id in user_balances:
+                user_balances[user_id] += 1  # Add 1 coin back if the curator fails to respond
                 save_user_balances(user_balances)
+                await ctx.author.send(f"{curator.name} failed to answer your request in time. Here's your coin back.")
             else:
-                print("User's balance not found.")
-            # Timer after the curator has provided feedback
-            await asyncio.sleep(10)
-            # Delete the temporary channel for the curator
-            await curator_channel.delete()
-
-        elif str(reaction.emoji) == '❌':  # Curator declined
-            await curator_channel.send("Application declined! Provide feedback to the artist.")
-            # Ask the curator to provide feedback
-            await submission_channel.send(f"{ctx.author.mention}, your application has been declined by @{curator}. Please check your DMs for feedback.")
-            
-            def feedback_check(message):
-                return message.author == curator and message.channel == curator_channel
-
-            feedback = await client.wait_for('message', check=feedback_check)
-            # Forward the feedback to the artist's DM
-            await ctx.author.send(f"Feedback from {curator.mention}:\n{feedback.content}")
-
-            # Timer after the curator has provided feedback
-            await asyncio.sleep(10)
-            # Delete the temporary channel for the curator
-            await curator_channel.delete()
-            
-    except asyncio.TimeoutError:  # Curator didn't react in time
-        await curator_channel.send("Time's up. Application unprocessed.")
+                print("User balance not found.")
 
 
-@client.command()
-@has_required_role("Artist")
-async def cancel_submission(ctx):
-    # Check if the user has an active submission
-    active_submissions = [channel for channel in ctx.guild.channels if ctx.author in channel.members and "Submission" in channel.name]
+# @client.command()
+# @has_required_role("Artist")
+# async def cancel_submission(ctx):
+#     modChannel = client.get_channel(mod_channel)
+    
+#     # Check if the user has an active submission
+#     active_submissions = [channel for channel in ctx.guild.channels if ctx.author in channel.members and "Submission" in channel.name]
 
-    if not active_submissions:
-        await ctx.send("You don't have an active submission.")
-        return
+#     if not active_submissions:
+#         await ctx.send("You don't have an active submission.")
+#         return
 
-    # Delete the active submission channel
-    await active_submissions[0].delete()
-    await ctx.send("Submission canceled. The temporary channel has been deleted.")
+#     # Delete the active submission channel
+#     await active_submissions[0].delete()
+#     await ctx.author.send("Submission canceled. The temporary channel has been deleted.\nPlease Check if your coins were deducted during the submition process.\n If so please contact our mods to file a coin retreival process!!")
+#     await modChannel.send(f"{ctx.author.name} has cancelled their request, please be alert of coin retreival requests.")
 
 
 
+# #CURATOR CONFIRMATION
+# @client.command()
+# @has_required_role("Curator")
+# async def shared(ctx, artist: discord.User, playlist_link: str):
+#     await asyncio.sleep(5)
+#     await ctx.message.delete()
+#     # Replace CHANNEL_ID with the specific channel ID where the link will be forwarded
+#     target_channel = client.get_channel(submission_info_channel)
 
-#CURATOR CONFIRMATION
-@client.command()
-@has_required_role("Curator")
-async def shared(ctx, artist: discord.User, playlist_link: str):
-    # Replace CHANNEL_ID with the specific channel ID where the link will be forwarded
-    target_channel = client.get_channel(submission_info_channel)
+#     # Forward the playlist link to the target channel
+#     await target_channel.send(f"The song has been shared: {playlist_link}. Tagging {artist.mention} for notification.")
 
-    # Forward the playlist link to the target channel
-    await target_channel.send(f"The song has been shared: {playlist_link}. Tagging {artist.mention} for notification.")
-
-    # Notify the artist about the shared song
-    await ctx.send(f"You've successfully shared the song. The artist has been notified.")
-    await artist.send(f"Your song has been shared. Check it out here: {playlist_link}")
+#     # Notify the artist about the shared song
+#     await ctx.send(f"You've successfully shared the song. The artist has been notified.")
+#     await artist.send(f"Your song has been shared. Check it out here: {playlist_link}")
+    
 
 @client.command()
 @has_required_role("Curator")
 async def cashout(ctx, amount: int):
+    await asyncio.sleep(3)
+    await ctx.message.delete()
     user_id = str(ctx.author.id)
     user= ctx.author
+    cashout_channel = client.get_channel(cashout)
+    modChannel = client.get_channel(mod_channel)
 
     # Check the user's current balance
     await check_balance(ctx)
-
+    curator_overwrites = {
+        ctx.guild.default_role: discord.PermissionOverwrite(read_messages=False),
+        ctx.guild.me: discord.PermissionOverwrite(read_messages=True),
+        user: discord.PermissionOverwrite(read_messages=True),
+    }
+    curator_channel = await ctx.guild.create_text_channel(f'{user.name} Cashout-TC', overwrites=curator_overwrites)
     if user_id in user_balances:
         balance = user_balances[user_id]
 
         if amount <= balance:
             # Simulate a payment or currency conversion
             price = amount * 2
-            paypal = 1924729712987192571
-            await user.send(f"Your AudioPitch coin cashout totals to ${price}, please send your payment to the following paypal account:\nPayPal Account Number: {paypal}.\nPlease send the receipt manually to []'s DM. Thank you!")
-
-            # Simulate deduction of coins
-            user_balances[user_id] -= amount
-            save_user_balances(user_balances)
+            await curator_channel.send(f"You're cashing out {amount} or ${price} worth of AudioCoins, please send a DM to [] in order to process your cashout request")
+            await modChannel.send(f"{ctx.author.name} has used the !cashout command, please be alert for DM's pertaining to the cashout request.")
+            
+            await asyncio.sleep(5)
+            await cashout_channel.delete()
 
         else:
-            await ctx.send("Insufficient balance to cash out.")
+            await curator_channel.send("Insufficient balance to cash out.")
+            await asyncio.sleep(5)
+            await cashout_channel.delete()
     else:
-        await ctx.send("User balance not found.")
+        balance_error = await cashout_channel.send("User balance not found.")
+        await asyncio.sleep(5)
+        await cashout_channel.delete()
+        await balance_error.delete()
 
 client.run(BOT_TOKEN)
