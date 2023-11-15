@@ -15,15 +15,15 @@ role_message_id = None
 
 mods = "AudioPitch Team"
 mod_channel = 1168550607867629659
-submission_info_channel = 1167865127660433498
+submit_your_song = 1167864900337549363
 general_roles = 1167862425333284895
 welcome = 1170634241894252564
 audio_coins = 1167865516602429460
 songs_to_share = 1167864257690489026
-cashout = 1167864319497744394
+Cashout = 1174171461473284096
 mods_curator_application = 1173655198711939132
-
-paypal = 1924729712987192571
+mods_buy_coins = 1174165449206927380
+bot_commands = 1168549555038584902
 
 @client.event
 async def on_ready():
@@ -118,6 +118,14 @@ async def ban_error(ctx, error):
     if isinstance(error, commands.MissingPermissions):
         await ctx.send("You don't have permission to ban people!")
 
+def restrict_channel(*channel_ids):
+    def predicate(ctx):
+        if ctx.channel.id in channel_ids:
+            return True
+        else:
+            raise commands.CheckFailure("Invalid Text-Channel, Please use the command in the designated text-channel!!!")
+    return commands.check(predicate)
+
 ##ROLE PICKING SYSTEM
 # Load selected roles from JSON file
 def load_selected_roles():
@@ -205,15 +213,59 @@ async def on_raw_reaction_add(payload):
                         thanks = await application_channel.send(f"Thank you, your request is being reviewed, please wait for notifications from the AudioPitch Bot or the AudioPitch mods.")
                         await asyncio.sleep(10)
                         await thanks.delete()
-                        await asyncio.sleep(10)
+                        await asyncio.sleep(2)
                         await application_channel.delete()
-                        mods_role = discord.utils.get(guild.roles, name=mods)
-                        await modCurator.send(f"{mods_role.mention} A Pending Curator {member.name} has sent a request to become a Curator, please review their information.")
+                        mods_role = discord.utils.get(guild.roles, name=mods) 
+                        message_content = f"{mods_role.mention} A Pending Curator {member.name} has sent a request to become a Curator, please click the reaction to approve or decline the request.\n"
                         # Sending the stored answers as formatted text
                         for header, answer_content in answers_with_headers:
-                            await modCurator.send(f'{header}\r{answer_content}')
+                            message_content += f'\n\n{header}\r{answer_content}'
+                        
+                        def mods_check(reaction, user):
+                            return user in mods_role.members and reaction.message.id == message.id
+                        
+                        message = await modCurator.send(message_content)
+                        # Add reactions for approval or decline
+                        await message.add_reaction('✅')  # Approve
+                        await message.add_reaction('❌')  # Decline
+                        
+                        try:
+                            # Wait for a reaction from the curator
+                            reaction, user = await client.wait_for('reaction_add', check=mods_check, timeout=999999999999)
+
+                            if str(reaction.emoji) == '✅':  # Curator approved
+                                role = discord.utils.get(guild.roles, name="Curator")
+                                delete = discord.utils.get(guild.roles, name="Curator Pending")
+                                if role and delete:
+                                    await member.remove_roles(delete)
+                                    await member.add_roles(role)
+                                    await member.send(f"{member.mention} your application has been approved, you've been assigned the {role.name} role.")
+                                    selected_roles[user_id] = role.name
+                                    save_selected_roles(selected_roles)
+                                else:
+                                    print("Role not found.")  # Handle role not found scenario
+                                message_2 = await modCurator.send(f"Application approved! {member.mention} has been given role of Curator!!")
+                                await asyncio.sleep(10)
+                                await message.delete()
+                                await message_2.delete()
+
+                            elif str(reaction.emoji) == '❌':  # Curator declined
+                                delete = discord.utils.get(guild.roles, name="Curator Pending")
+                                if delete:
+                                    await member.remove_roles(delete)
+                                    prompt = await member.send(f"{member.mention} Application declined by moderators!Please try again later.")
+                                    await asyncio.sleep(10)
+                                    await prompt.delete()
+                                    selected_roles[user_id] = role.name
+                                    save_selected_roles(selected_roles)
+                                else:
+                                    print("Role not found.")  # Handle role not found scenario
+                        except asyncio.TimeoutError:  # Curator didn't react in time
+                            await modCurator.send("Time's up. Application unprocessed.")
+                            await member.send(f"the mods failed to answer your request in time, please make another request.")
+                        
                     else:
-                        other = await member.send(f"You've been assigned the {role.name} role.")
+                        other = await member.send(f"{member.mention} You've been assigned the {role.name} role.")
                         await asyncio.sleep(5)
                         await other.delete()
                         await asyncio.sleep(10)
@@ -229,6 +281,7 @@ async def on_raw_reaction_add(payload):
 #ROLE ADDING AND REMOVING FOR MODS
 @client.command()
 @has_required_role(mods)
+@restrict_channel(bot_commands)
 async def addRole(ctx, user: discord.Member, *, role: discord.Role):
     await asyncio.sleep(3)
     await ctx.message.delete()
@@ -254,6 +307,7 @@ async def addRole_error(ctx, error):
 
 @client.command()
 @has_required_role(mods)
+@restrict_channel(bot_commands)
 async def removeRole(ctx, user: discord.Member, *, role: discord.Role):
     await asyncio.sleep(3)
     await ctx.message.delete()
@@ -304,6 +358,7 @@ except FileNotFoundError:
     user_balances = {}
 
 @client.command()
+@restrict_channel(audio_coins, Cashout)
 async def check_balance(ctx):
     await asyncio.sleep(3)
     await ctx.message.delete()
@@ -316,40 +371,84 @@ async def check_balance(ctx):
         await user.send("You don't have any coins yet.")
 
 @client.command()
-async def buy_coins(ctx, amount: int):
-    await asyncio.sleep(3)
-    await ctx.message.delete()
-    modChannel = client.get_channel(mod_channel)
-    channel = client.get_channel(audio_coins)
-    user_id = str(ctx.author.id)
+@restrict_channel(audio_coins)
+async def buy_coins(ctx):
+    buyCoins = ctx.guild.get_channel(mods_buy_coins)
+    # Create a temporary text channel for the purchase
     overwrites = {
-        ctx.guild.default_role: discord.PermissionOverwrite(read_messages=False),
-        ctx.guild.me: discord.PermissionOverwrite(read_messages=True),
-        ctx.author: discord.PermissionOverwrite(read_messages=True),
+            ctx.guild.default_role: discord.PermissionOverwrite(read_messages=False),
+            ctx.guild.me: discord.PermissionOverwrite(read_messages=True),
+            ctx.author: discord.PermissionOverwrite(read_messages=True),
+        }
+    coin_purchase_channel = await ctx.guild.create_text_channel(f'{ctx.author.name}-Buy-AudioCoins', overwrites=overwrites)
+
+    # Send the purchase options
+    purchase_options = {
+        "1": {"coins": 2, "price": 3},
+        "2": {"coins": 5, "price": 6},
+        "3": {"coins": 8, "price": 9},
     }
-    temp_channel = await ctx.guild.create_text_channel(f'{ctx.author.name}-Coin-Purchase-TC', overwrites=overwrites)
-    await temp_channel.send(f"Please transfer your money to the following PayPal Account {paypal}")
-    
-    def payment_check(message):
-                return message.author == ctx.author and message.channel == temp_channel
 
-    response = await client.wait_for('message', check=payment_check, timeout=604800)
-    if user_id not in user_balances:
-        user_balances[user_id] = 0
-    user_balances[user_id] += amount
-    await ctx.author.send(f"Successfully added {amount} coins to your account, please check your balance by using the !check_balance command.")
-    await modChannel.send(f"{ctx.author.mention} has purchased {amount} Coins, please check for purchase confirmation!!")
-    # Save the updated balances to the file
-    with open('user_balances.json', 'w') as file:
-        json.dump(user_balances, file)
+    purchase_prompt = "Please choose an option by typing the number:\n"
+    for option, details in purchase_options.items():
+        purchase_prompt += f"Option {option}: {details['coins']} coins for ${details['price']}\n"
 
-    await asyncio.sleep(10)
-    await temp_channel.delete()
+    await coin_purchase_channel.send(purchase_prompt)
 
+    def check(message):
+        return message.author == ctx.author and message.channel == coin_purchase_channel
+
+    try:
+        msg = await client.wait_for('message', check=check, timeout=3600 * 24)
+        selected_option = msg.content
+
+        if selected_option in purchase_options:
+            selected_purchase = purchase_options[selected_option]
+            await coin_purchase_channel.send(f"You've chosen Option {selected_option}. Please transfer ${selected_purchase['price']} to this PayPal account.")
+
+            # Wait for transfer proof (receipt)
+            await coin_purchase_channel.send("Please provide transfer proof (receipt) once the payment is done.")
+
+            receipt_msg = await client.wait_for('message', check=check, timeout=3600 * 24)
+            
+            await coin_purchase_channel.send(f"Thank You {ctx.author.mention} for purchasing AudioCoins, please wait for our mods to verify your transaction. You will be notified soon!!")
+            await buyCoins.send(f"{ctx.author.mention} has filed a coin purchase request for {selected_option}, please verify whether the receipt is valid or not.\n\nReceipt:\n{receipt_msg.content}")
+            await asyncio.sleep(10)
+            await coin_purchase_channel.delete()
+        else:
+            await coin_purchase_channel.send("Invalid option selected. Purchase canceled.")
+            await asyncio.sleep(10)
+            await coin_purchase_channel.delete()
+    except asyncio.TimeoutError:
+        await coin_purchase_channel.send("Purchase timed out.")
+        await coin_purchase_channel.delete()
+
+@client.command()
+@has_required_role(mods)
+@restrict_channel(bot_commands)
+async def addcoins(ctx, member: discord.Member, amount: int):
+    user_balances = load_user_balances()
+
+    # Check if the tagged member already has an entry in the balance data
+    user_id = str(member.id)
+    if user_id in user_balances:
+        # Add coins to the existing balance
+        user_balances[user_id] += amount
+    else:
+        # Create a new entry for the tagged member
+        user_balances[user_id] = amount
+
+    # Save the updated balances to the JSON file
+    save_user_balances(user_balances)
+
+    msg = await ctx.send(f"Added {amount} coins to {member.display_name}'s account.")
+    await asyncio.sleep(5)
+    await ctx.message.delete()
+    await msg.delete()
 #SUBMISSION HANDLING
 @client.command()
 @has_required_role("Artist")
-
+@restrict_channel(submit_your_song)
 async def submit_track(ctx, curator: discord.User):
     await asyncio.sleep(3)
     await ctx.message.delete()
@@ -542,42 +641,47 @@ async def submit_track(ctx, curator: discord.User):
 
 @client.command()
 @has_required_role("Curator")
-async def cashout(ctx, amount: int):
+@restrict_channel(Cashout)
+async def cashout(ctx):
     await asyncio.sleep(3)
     await ctx.message.delete()
     user_id = str(ctx.author.id)
     user= ctx.author
-    cashout_channel = client.get_channel(cashout)
-    modChannel = client.get_channel(mod_channel)
-
-    # Check the user's current balance
-    await check_balance(ctx)
-    curator_overwrites = {
+    cashout_channel = client.get_channel(Cashout)
+    overwrites = {
         ctx.guild.default_role: discord.PermissionOverwrite(read_messages=False),
         ctx.guild.me: discord.PermissionOverwrite(read_messages=True),
         user: discord.PermissionOverwrite(read_messages=True),
     }
-    curator_channel = await ctx.guild.create_text_channel(f'{user.name} Cashout-TC', overwrites=curator_overwrites)
+    temp = await ctx.guild.create_text_channel(f'{user.name} Cashout-TC', overwrites=overwrites)
+
+    await temp.send(f"{ctx.author.mention}How many audiocoins would you like to cashout?")
+
+    def amount_check(message):
+        return message.author == ctx.author and message.channel == temp
+    
+    amount = await client.wait_for('message', check=amount_check)
     if user_id in user_balances:
         balance = user_balances[user_id]
-
-        if amount <= balance:
-            # Simulate a payment or currency conversion
-            price = amount * 2
-            await curator_channel.send(f"You're cashing out {amount} or ${price} worth of AudioCoins, please send a DM to [] in order to process your cashout request")
-            await modChannel.send(f"{ctx.author.name} has used the !cashout command, please be alert for DM's pertaining to the cashout request.")
-            
+        
+        if int(amount.content) <= balance:
+            price = int(amount.content) *2
+            await temp.send(f"Please send your paypal email information in this text-channel.")
+            def info_check(message):
+                return message.author == ctx.author and message.channel == temp
+            info = await client.wait_for('message', check=info_check)
+            await temp.send(f"Thank You {ctx.author.mention} for trusting us, please wait for the AudioPitch team's response. You will be notified immediately")
+            await cashout_channel.send(f"{ctx.author.name} has used cashed out {amount.content} AudioCoins, please transfer ${price.content} to this PayPal account: \n\n{info}")
             await asyncio.sleep(5)
-            await cashout_channel.delete()
 
         else:
-            await curator_channel.send("Insufficient balance to cash out.")
-            await asyncio.sleep(5)
-            await cashout_channel.delete()
+            await temp.send("Insufficient AudioCoins balance to cash out.")
+            await asyncio.sleep(3)
+            await temp.delete()
     else:
-        balance_error = await cashout_channel.send("User balance not found.")
+        balance_error = await temp.send("User balance not found.")
         await asyncio.sleep(5)
-        await cashout_channel.delete()
+        await temp.delete()
         await balance_error.delete()
 
 client.run(BOT_TOKEN)
