@@ -123,7 +123,16 @@ def restrict_channel(*channel_ids):
         if ctx.channel.id in channel_ids:
             return True
         else:
-            raise commands.CheckFailure("Invalid Text-Channel, Please use the command in the designated text-channel!!!")
+            async def prompt():
+                warning_msg = await ctx.send("Invalid Text-Channel, Please use the command in the designated text-channel!!!")
+                await asyncio.sleep(5)  # Wait for 5 seconds
+                await warning_msg.delete()
+                await ctx.message.delete()
+
+            # Use asyncio to handle the warning message and deletion
+            asyncio.create_task(prompt())
+            return False  # Returning False directly indicates the check failed
+
     return commands.check(predicate)
 
 ##ROLE PICKING SYSTEM
@@ -373,6 +382,8 @@ async def check_balance(ctx):
 @client.command()
 @restrict_channel(audio_coins)
 async def buy_coins(ctx):
+    await asyncio.sleep(3)
+    await ctx.message.delete()
     buyCoins = ctx.guild.get_channel(mods_buy_coins)
     # Create a temporary text channel for the purchase
     overwrites = {
