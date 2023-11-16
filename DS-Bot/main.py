@@ -397,9 +397,9 @@ async def buy_coins(ctx):
 
     # Send the purchase options
     purchase_options = {
-        "1": {"coins": 2, "price": 3},
-        "2": {"coins": 5, "price": 6},
-        "3": {"coins": 8, "price": 9},
+        "1": {"coins": 6, "price": 6},
+        "2": {"coins": 9, "price": 8},
+        "3": {"coins": 12, "price": 10},
     }
 
     purchase_prompt = "Please choose an option by typing the number:\n"
@@ -412,12 +412,13 @@ async def buy_coins(ctx):
         return message.author == ctx.author and message.channel == coin_purchase_channel
 
     try:
+        paypal = "https://paypal.me/jaysiegers"
         msg = await client.wait_for('message', check=check, timeout=3600 * 24)
         selected_option = msg.content
 
         if selected_option in purchase_options:
             selected_purchase = purchase_options[selected_option]
-            await coin_purchase_channel.send(f"You've chosen Option {selected_option}. Please transfer ${selected_purchase['price']} to this PayPal account: []")
+            await coin_purchase_channel.send(f"You've chosen Option {selected_option}. Please transfer ${selected_purchase['price']} to this PayPal account:\n\n {paypal}")
 
             # Wait for transfer proof (receipt)
             await coin_purchase_channel.send("Please provide transfer proof (receipt) once the payment is done.")
@@ -488,7 +489,7 @@ async def submit_track(ctx, curator: discord.User):
         channel = await ctx.guild.create_text_channel(f'{ctx.author.name}-Track-Info-TC', overwrites=overwrites)
 
         # Start the application process
-        await channel.send(f"{ctx.author.mention}, Private channel created! Please answer the following questions!\n\nIMPORTANT NOTE: If you want to cancel the submission please type in CANCEL in this text channel. Your Coins Hasn't been deducted yet at this point.")
+        await channel.send(f"{ctx.author.mention}, Private channel created! Please answer the following questions!\n\nIMPORTANT NOTE: If you want to cancel the submission please type in CANCEL in this text channel. Your Coins Hasn't been deducted yet at this point.\n(2 AudioCoins will be deducted from your balance if you submit your track).")
 
         questions = [
         "Please provide your track link.",
@@ -551,7 +552,7 @@ async def submit_track(ctx, curator: discord.User):
             # Deduct 1 coin from the artist's balance
             user_id = str(ctx.author.id)
             if user_id in user_balances:
-                user_balances[user_id] -= 1  # Deduct 1 coin
+                user_balances[user_id] -= 2  # Deduct 2 coin
                 save_user_balances(user_balances)
             else:
                 print("User balance not found.")
@@ -628,7 +629,7 @@ async def submit_track(ctx, curator: discord.User):
                                 print("User's balance not found.")
                         elif str(reaction.emoji) == '❌':  # Mods declined
                             if user_id in user_balances:
-                                user_balances[user_id] += 1  # Add 1 coin to Artist's balance
+                                user_balances[user_id] += 2  # Add 1 coin to Artist's balance
                                 save_user_balances(user_balances)
                                 await curator.send(f"{curator.mention}, the moderators has taken a look at your playlist, and it seems that we could not find the track {content_of_track_link} in your playlist.")
                                 await ctx.author.send(f"Curator {curator.mention} has failed to add your track to their playlist {curator_link.content}, your coins have been refunded back to your account. Check using the !check_balance command.")
@@ -637,8 +638,9 @@ async def submit_track(ctx, curator: discord.User):
                     except asyncio.TimeoutError:  # Mods didn't react in time
                         await submission_tracking.send("Time's up. Application unprocessed.")
                         await curator.send(f"the mods failed to review your request in time, please make another request.")
+                        await ctx.author.send(f"The mods failed to review the curator's request in time, your coins have been refunded back to your account. Check using the !check_balance command.")
                         if user_id in user_balances:
-                                user_balances[user_id] += 1  # Add 1 coin to Artist's balance
+                                user_balances[user_id] += 2  # Add 2 coins back to Artist's balance
                                 save_user_balances(user_balances)
                         else:
                             print("User's balance not found.")
@@ -683,7 +685,7 @@ async def submit_track(ctx, curator: discord.User):
             except asyncio.TimeoutError:  # Curator didn't react in time
                 await curator_channel.send("Time's up. Application unprocessed.")
                 if user_id in user_balances:
-                    user_balances[user_id] += 1  # Add 1 coin back if the curator fails to respond
+                    user_balances[user_id] += 2  # Add 1 coin back if the curator fails to respond
                     save_user_balances(user_balances)
                     await ctx.author.send(f"{curator.name} failed to answer your request in time. Here's your coin back.")
                 else:
@@ -715,7 +717,7 @@ async def cashout(ctx):
         balance = user_balances[user_id]
         
         if int(amount.content) <= balance:
-            price = int(amount.content) *2
+            price = int(amount.content) * 1
             await temp.send(f"Please send your paypal email information in this text-channel.")
             def info_check(message):
                 return message.author == ctx.author and message.channel == temp
