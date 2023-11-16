@@ -24,6 +24,8 @@ Cashout = 1174171461473284096
 mods_curator_application = 1173655198711939132
 mods_buy_coins = 1174165449206927380
 bot_commands = 1168549555038584902
+curator_cashout = 1167864319497744394
+submissionTrack = 1174600646125690910
 
 @client.event
 async def on_ready():
@@ -60,7 +62,7 @@ def has_required_role(role_name):
 
 # Hello Command
 @client.command()
-async def Hello(ctx):
+async def hello(ctx):
     await ctx.send("Hello, I am the Audiopitch bot.")
 #GREETINGS AND LEAVE PROMPT
 # Join Message
@@ -81,7 +83,7 @@ async def on_member_join(member):
     # Save the updated balances to the file
     save_user_balances(user_balances)
 
-    await channel.send(f"Welcome To The Audidopitch Server <@{member.id}>, We hope you'll enjoy it here. \n\n To get a list of commands please refer to the [] text-channel!!")
+    await channel.send(f"Welcome To The Audidopitch Server <@{member.id}>.\n\nPlease take a look at our rules in the rules text-channel, and don't forget to pick a role in the general-roles TC.\n\nAdditionally, please refer to the tutorial TC after you have chosen your role.\n\nFinally, to get a list of commands please refer to the list-of-commands text-channel!!\n\nWe hope you'll enjoy it here.")
 
     # Optionally, you can send a message about the initial balance
     await member.send(f"Welcome to the AudioPitch server! You've received an initial balance of {initial_balance} coins.")
@@ -367,7 +369,7 @@ except FileNotFoundError:
     user_balances = {}
 
 @client.command()
-@restrict_channel(audio_coins, Cashout)
+@restrict_channel(audio_coins, curator_cashout)
 async def check_balance(ctx):
     await asyncio.sleep(3)
     await ctx.message.delete()
@@ -415,7 +417,7 @@ async def buy_coins(ctx):
 
         if selected_option in purchase_options:
             selected_purchase = purchase_options[selected_option]
-            await coin_purchase_channel.send(f"You've chosen Option {selected_option}. Please transfer ${selected_purchase['price']} to this PayPal account.")
+            await coin_purchase_channel.send(f"You've chosen Option {selected_option}. Please transfer ${selected_purchase['price']} to this PayPal account: []")
 
             # Wait for transfer proof (receipt)
             await coin_purchase_channel.send("Please provide transfer proof (receipt) once the payment is done.")
@@ -437,7 +439,7 @@ async def buy_coins(ctx):
 @client.command()
 @has_required_role(mods)
 @restrict_channel(bot_commands)
-async def addcoins(ctx, member: discord.Member, amount: int):
+async def addCoins(ctx, member: discord.Member, amount: int):
     user_balances = load_user_balances()
 
     # Check if the tagged member already has an entry in the balance data
@@ -467,6 +469,7 @@ async def submit_track(ctx, curator: discord.User):
     guild = ctx.guild
     curator_user = guild.get_member(curator.id)
     modChannel = ctx.guild.get_channel(mod_channel)  # Replace with your channel ID
+    submission_tracking = ctx.guild.get_channel(submissionTrack)
     
     required_role = "Curator"
 
@@ -543,7 +546,7 @@ async def submit_track(ctx, curator: discord.User):
                 print("Submission_info channel not found.")
 
             # Inform the tagged curator
-            await channel.send(f"{curator.mention}, your input has been requested. Check the information submitted by {ctx.author.mention}.")
+            await channel.send(f"Thank You {ctx.author.mention} for submitting the necessary information, please check the submission-info Text-Channel for further updates.")
 
             # Deduct 1 coin from the artist's balance
             user_id = str(ctx.author.id)
@@ -565,7 +568,7 @@ async def submit_track(ctx, curator: discord.User):
             }
             curator_channel = await ctx.guild.create_text_channel(f'submission {curator.name}', overwrites=curator_overwrites)
             
-            await curator_channel.send(f"Hello {curator.mention}, {ctx.author.mention} has filed a track submission for you, please approve or decline this application using the reactions below.\nHere are {ctx.author.mention}'s track data:")
+            message = await curator_channel.send(f"Hello {curator.mention}, {ctx.author.mention} has filed a track submission for you, please approve or decline this application using the reactions below.\nHere are {ctx.author.mention}'s track data:")
             # Send the artist's answers to the curator's channel           
             for header, answer_content in answers_with_headers:
                 message = await curator_channel.send(f'{header}\r{answer_content}')
@@ -598,15 +601,51 @@ async def submit_track(ctx, curator: discord.User):
                         return message.author == curator and message.channel == songs2share
 
                     curator_link = await client.wait_for('message', check=link_check, timeout=604800)
-
-                    curator_id = str(curator.id)
-                    if curator_id in user_balances:
-                        user_balances[curator_id] += 1  # Add 1 coin to Curator's balance
-                        save_user_balances(user_balances)
-                        await curator.send(f"Successfully Added 1 coin to your account from a successful transaction with {ctx.author.name}")
-                        await ctx.author.send(f"Curator {curator.mention} has added your track to their playlist, go ahead and check here: {curator_link.content}")
-                    else:
-                        print("User's balance not found.")
+                    await songs2share.send("Thank You for providing the link to your playlist, the link is currently being reveiwed by the mods, please wait for further notifications!")
+                    track_link = answers_with_headers[0]
+                    header_of_track_link, content_of_track_link = track_link
+                    # await ctx.author.send(f"Curator {curator.mention} has added your track to their playlist, go ahead and check here: {curator_link.content}")
+                    confirmation_message = await submission_tracking.send(f"{curator.mention} has approved and confirmed that they have added {ctx.author.mention}'s track to their playlist, please review the validity of that statement.\n\nTrack Link: {content_of_track_link}\nPlaylist Link: {curator_link.content}")
+                    mods_role = discord.utils.get(guild.roles, name=mods)
+                    def moderators_check(reaction, user):
+                        return user in mods_role.members and reaction.message.id == confirmation_message.id
+                    
+                    # Add reactions for approval or decline
+                    await confirmation_message.add_reaction('✅')  # Approve
+                    await confirmation_message.add_reaction('❌')  # Decline
+                    
+                    try:
+                        # Wait for a reaction from the curator
+                        reaction, user = await client.wait_for('reaction_add', check=moderators_check, timeout=604800)
+                        if str(reaction.emoji) == '✅':  # mods approved
+                            curator_id = str(curator.id)
+                            if curator_id in user_balances:
+                                user_balances[curator_id] += 1  # Add 1 coin to Curator's balance
+                                save_user_balances(user_balances)
+                                await curator.send(f"Successfully Added 1 coin to your account from a successful transaction with {ctx.author.name}")
+                                await ctx.author.send(f"Curator {curator.mention} has added your track to their playlist, go ahead and check here: {curator_link.content}")
+                            else:
+                                print("User's balance not found.")
+                        elif str(reaction.emoji) == '❌':  # Mods declined
+                            if user_id in user_balances:
+                                user_balances[user_id] += 1  # Add 1 coin to Artist's balance
+                                save_user_balances(user_balances)
+                                await curator.send(f"{curator.mention}, the moderators has taken a look at your playlist, and it seems that we could not find the track {content_of_track_link} in your playlist.")
+                                await ctx.author.send(f"Curator {curator.mention} has failed to add your track to their playlist {curator_link.content}, your coins have been refunded back to your account. Check using the !check_balance command.")
+                            else:
+                                print("User's balance not found.")
+                    except asyncio.TimeoutError:  # Mods didn't react in time
+                        await submission_tracking.send("Time's up. Application unprocessed.")
+                        await curator.send(f"the mods failed to review your request in time, please make another request.")
+                        if user_id in user_balances:
+                                user_balances[user_id] += 1  # Add 1 coin to Artist's balance
+                                save_user_balances(user_balances)
+                        else:
+                            print("User's balance not found.")
+                        await asyncio.sleep(1)
+                        await curator_channel.delete()
+                        await songs2share.delete()
+                        await submission_channel.delete()
                     if modChannel:
                         await modChannel.send(f"{ctx.author.mention}'s Request has been accepted by {curator.mention}, Here are the track's metadata:\n")
                         for header, answer_content in answers_with_headers:
@@ -652,7 +691,7 @@ async def submit_track(ctx, curator: discord.User):
 
 @client.command()
 @has_required_role("Curator")
-@restrict_channel(Cashout)
+@restrict_channel(curator_cashout)
 async def cashout(ctx):
     await asyncio.sleep(3)
     await ctx.message.delete()
@@ -682,9 +721,9 @@ async def cashout(ctx):
                 return message.author == ctx.author and message.channel == temp
             info = await client.wait_for('message', check=info_check)
             await temp.send(f"Thank You {ctx.author.mention} for trusting us, please wait for the AudioPitch team's response. You will be notified immediately")
-            await cashout_channel.send(f"{ctx.author.name} has used cashed out {amount.content} AudioCoins, please transfer ${price.content} to this PayPal account: \n\n{info}")
+            await cashout_channel.send(f"{ctx.author.name} has cashed out {amount.content} AudioCoins, please transfer ${price} to this PayPal account: \n\n{info.content}")
             await asyncio.sleep(5)
-
+            await temp.delete()
         else:
             await temp.send("Insufficient AudioCoins balance to cash out.")
             await asyncio.sleep(3)
