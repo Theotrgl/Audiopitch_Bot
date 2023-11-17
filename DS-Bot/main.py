@@ -288,7 +288,7 @@ async def on_raw_reaction_add(payload):
                     print("Role not found.")  # Handle role not found scenario
 
 
-
+#MOD COMMANDS
 #ROLE ADDING AND REMOVING FOR MODS
 @client.command()
 @has_required_role(mods)
@@ -344,6 +344,38 @@ async def removeRole_error(ctx, error):
     if isinstance(error, commands.MissingPermissions):
         await ctx.send("You do not have permission to use this command.")
 
+@client.command()
+@has_required_role(mods)
+@restrict_channel(mods_buy_coins)
+async def addCoins(ctx, member: discord.Member, amount: int):
+    user_balances = load_user_balances()
+
+    # Check if the tagged member already has an entry in the balance data
+    user_id = str(member.id)
+    if user_id in user_balances:
+        # Add coins to the existing balance
+        user_balances[user_id] += amount
+        await member.send(f"You have successfully purchased {amount} AudioCoins. Please check your balance by typing the command !check_balance in the #audio_coins text channel if you're an artist or #cashout if you're a curator.")
+    else:
+        # Create a new entry for the tagged member
+        user_balances[user_id] = amount
+
+    # Save the updated balances to the JSON file
+    save_user_balances(user_balances)
+
+    msg = await ctx.send(f"Added {amount} coins to {member.display_name}'s account.")
+
+@client.command()
+@has_required_role(mods)
+@restrict_channel(bot_commands)
+async def checkBalance(ctx, member: discord.Member):
+    user_balances = load_user_balances()
+
+    user_id = str(member.id)
+    if user_id in user_balances:
+        await ctx.send(f"{member.mention} has {user_balances[user_id]} coins.")
+    else:
+        await ctx.send(f"No record of {member.mention} in the database.")
 
 #COIN SYSTEM
 def load_user_balances():
@@ -418,16 +450,15 @@ async def buy_coins(ctx):
         if selected_option in purchase_options:
             selected_purchase = purchase_options[selected_option]
             await coin_purchase_channel.send(f"You've chosen Option {selected_option}. Please transfer ${selected_purchase['price']} to this PayPal account:\n\n {paypal}\n\n")
-            await coin_purchase_channel.send(f"Please provide receipt screenshot once the payment is complete.\n\n Note that our working ours are 03:00 - 15:00 GMT. We will notify you once your payment is verified by our team.")
+            await coin_purchase_channel.send(f"Please provide receipt screenshot once the payment is complete.\n\n*Note that our working ours are 03:00 - 15:00 GMT. We will notify you once your payment is verified by our team.")
 
             receipt_msg = await client.wait_for('message', check=check_receipt, timeout=3600 * 24)
 
             if receipt_msg.attachments:
                 attachment_url = receipt_msg.attachments[0].url  # Get the URL of the first attachment
                 # You can now use this URL to download or handle the attachment as needed
-                await coin_purchase_channel(f"Thank you {ctx.author.mention} for purchasing AudioCoins. You will receive your AudioCoins once the payment is verified by our team, and you will be notified soon.")
-                await coin_purchase_channel("\n\nBest,\nJay Siegers\nAudioPitch Team")
-                await buyCoins.send(f"{ctx.author.mention} has filed a coin purchase request for {selected_option}, please verify whether the receipt is valid or not.\n\nReceipt:\n{attachment_url}")
+                await coin_purchase_channel.send(f"Thank you {ctx.author.mention} for purchasing AudioCoins. You will receive your AudioCoins once the payment is verified by our team, and you will be notified soon.\n\nBest,\nJay Siegers\nAudioPitch Team")
+                await buyCoins.send(f"{ctx.author.mention} has filed a coin purchase request option {selected_option}, please verify whether the receipt is valid or not.\n\nReceipt:\n{attachment_url}")
                 await asyncio.sleep(10)
                 await coin_purchase_channel.delete()
             else:
@@ -442,26 +473,7 @@ async def buy_coins(ctx):
         await coin_purchase_channel.send("Purchase timed out.")
         await coin_purchase_channel.delete()
 
-@client.command()
-@has_required_role(mods)
-@restrict_channel(mods_buy_coins)
-async def addCoins(ctx, member: discord.Member, amount: int):
-    user_balances = load_user_balances()
 
-    # Check if the tagged member already has an entry in the balance data
-    user_id = str(member.id)
-    if user_id in user_balances:
-        # Add coins to the existing balance
-        user_balances[user_id] += amount
-        await member.send(f"You have successfully purchased {amount} AudioCoins. Please check your balance by typing the command !check_balance in the #audio_coins text channel.")
-    else:
-        # Create a new entry for the tagged member
-        user_balances[user_id] = amount
-
-    # Save the updated balances to the JSON file
-    save_user_balances(user_balances)
-
-    msg = await ctx.send(f"Added {amount} coins to {member.display_name}'s account.")
 #SUBMISSION HANDLING
 @client.command()
 @has_required_role("Artist")
