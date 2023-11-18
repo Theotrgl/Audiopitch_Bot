@@ -532,7 +532,7 @@ async def submit_track(ctx, curator: discord.User):
         questions = [
         "Please provide your track link.",
         "What is the genre of this song?",
-        "When is it released?"
+        "Please provide your song and/or artist description."
         ]
 
         header_list = [
