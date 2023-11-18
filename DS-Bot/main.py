@@ -92,8 +92,30 @@ async def on_member_join(member):
 # Leave Message
 @client.event
 async def on_member_remove(member):
+    user_id = str(member.id)
+    user_balances = load_user_balances()
+    selected_roles = load_selected_roles()
+
     channel = client.get_channel(welcome)
     await channel.send(f"<@{member.id}> has left the server, sad to see you go.")
+
+    if user_id in user_balances:
+        del user_balances[user_id]
+        save_user_balances(user_balances)
+        print("Balance successfully deleted")
+    else:
+        print("Balance does not exist")
+
+    if user_id in selected_roles:
+        # Retrieve the role_name associated with the user_id
+        role_names = selected_roles[user_id].keys()
+        for role_name in role_names:
+            del selected_roles[user_id][role_name]
+            save_selected_roles(selected_roles)
+            print("Successfully deleted role of user")
+    else:
+        print('User Does not have a role.')
+    
 
 #KICK AND BAN FUNCTIONS
 @client.command()
@@ -558,7 +580,7 @@ async def submit_track(ctx, curator: discord.User):
             user_id = str(ctx.author.id)
             if user_id in user_balances:
                 if user_balances[user_id]>=2:
-                    # Deduct 1 coin from the artist's balance
+                    # Deduct 2 coin from the artist's balance
                     user_balances[user_id] -= 2  # Deduct 2 coin
                     save_user_balances(user_balances)
                 else:
