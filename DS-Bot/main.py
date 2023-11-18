@@ -399,6 +399,23 @@ async def checkBalance(ctx, member: discord.Member):
     else:
         await ctx.send(f"No record of {member.mention} in the database.")
 
+@client.command()
+@has_required_role(mods)
+@restrict_channel(bot_commands)
+async def addBalance(ctx, member:discord.Member):
+    user_id = str(member.id)
+    initial_balance = 0  # You can set any initial balance you want
+    user_balances = load_user_balances()
+
+    if user_id not in user_balances:
+        user_balances[user_id] = initial_balance
+        await ctx.send(f"Successfully initialized {member.mention}'s balance!!")
+        save_user_balances(user_balances)
+    else:
+        await ctx.send(f"{member.mention} already has a balance!!")
+
+    
+
 #COIN SYSTEM
 def load_user_balances():
     try:
@@ -711,6 +728,7 @@ async def submit_track(ctx, curator: discord.User):
 
                         elif str(reaction.emoji) == '❌':  # Curator declined
                             await curator_channel.send("Application declined! Provide feedback to the artist.")
+                            await submission_tracking.send(f"{curator.mention} has declined {ctx.author.mention}'s track submission request.")
                             curator_id = str(curator.id)
                             def feedback_check(message):
                                 return message.author == curator and message.channel == curator_channel
@@ -795,5 +813,7 @@ async def cashout(ctx):
         await asyncio.sleep(5)
         await temp.delete()
         await balance_error.delete()
+    
+
 
 client.run(BOT_TOKEN)
