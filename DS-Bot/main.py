@@ -281,7 +281,6 @@ async def on_raw_reaction_add(payload):
                                 message_2 = await modCurator.send(f"Application approved! {member.mention} has been given role of Curator!!")
                                 await asyncio.sleep(10)
                                 await message.delete()
-                                await message_2.delete()
 
                             elif str(reaction.emoji) == '❌':  # Curator declined
                                 delete = discord.utils.get(guild.roles, name="Curator Pending")
@@ -378,7 +377,7 @@ async def addCoins(ctx, member: discord.Member, amount: int):
     if user_id in user_balances:
         # Add coins to the existing balance
         user_balances[user_id] += amount
-        await member.send(f"You have successfully purchased 6 AudioCoins. Please check your balance by typing the command !check_balance in the #audio-coins text channel")
+        await member.send(f"Your AudioCoin purchase was a success!! Please check your balance by typing the command !check_balance in the #audio-coins text channel")
     else:
         # Create a new entry for the tagged member
         user_balances[user_id] = amount
@@ -387,6 +386,26 @@ async def addCoins(ctx, member: discord.Member, amount: int):
     save_user_balances(user_balances)
 
     msg = await ctx.send(f"Added {amount} coins to {member.display_name}'s account.")
+
+@client.command()
+@has_required_role(mods)
+@restrict_channel(Cashout)
+async def deductCoins(ctx, member: discord.Member, amount: int):
+    user_balances = load_user_balances()
+
+    # Check if the tagged member already has an entry in the balance data
+    user_id = str(member.id)
+    if user_id in user_balances:
+        # Add coins to the existing balance
+        user_balances[user_id] -= amount
+        await member.send(f"Your cashout request was a success!! our mods have sent the receipt to your dm's and your coins have been deducted. Thank You for using our service.")
+        await ctx.send(f"Successfully notified {member.mention}, and {amount} coins have been deducted.")
+    else:
+        # Create a new entry for the tagged member
+        user_balances[user_id] = amount
+
+    # Save the updated balances to the JSON file
+    save_user_balances(user_balances)
 
 @client.command()
 @has_required_role(mods)
@@ -841,9 +860,11 @@ async def cashout(ctx):
         return message.author == ctx.author and message.channel == temp
     
     amount = await client.wait_for('message', check=amount_check)
+    user_balances = load_user_balances()
     if user_id in user_balances:
         balance = user_balances[user_id]
-        
+        save_user_balances(user_balances)
+
         if int(amount.content) <= balance:
             price = int(amount.content) * 1
             await temp.send(f"Please send your paypal email information in this text-channel.")
