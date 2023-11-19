@@ -587,6 +587,11 @@ async def submit_track(ctx, curator: discord.User):
     curator_user = guild.get_member(curator.id)
     modChannel = ctx.guild.get_channel(mod_channel)  # Replace with your channel ID
     submission_tracking = ctx.guild.get_channel(submissionTrack)
+    user_balances = load_user_balances()
+    if user_balances[user_id]>=2:
+        # Deduct 2 coin from the artist's balance
+        user_balances[user_id] -= 2  # Deduct 2 coin
+        save_user_balances(user_balances)
 
     artist_channel_var = f'channel-{channel_Id}' 
     curator_channel_var = f'curator_channel_{channel_Id}'
@@ -651,6 +656,11 @@ async def submit_track(ctx, curator: discord.User):
         
         if cancel_triggered:
             await asyncio.sleep(1)
+            user_balances = load_user_balances()
+            if user_balances[user_id]>=2:
+                    # Deduct 2 coin from the artist's balance
+                    user_balances[user_id] += 2  # Deduct 2 coin
+                    save_user_balances(user_balances)
             await channel_references[artist_channel_var].delete()
         else:
             if modChannel:
@@ -661,9 +671,9 @@ async def submit_track(ctx, curator: discord.User):
             user_id = str(ctx.author.id)
             if user_id in user_balances:
                 if user_balances[user_id]>=2:
-                    # Deduct 2 coin from the artist's balance
-                    user_balances[user_id] -= 2  # Deduct 2 coin
-                    save_user_balances(user_balances)
+                    # # Deduct 2 coin from the artist's balance
+                    # user_balances[user_id] -= 2  # Deduct 2 coin
+                    # save_user_balances(user_balances)
                     await channel_references[artist_channel_var].send(f"Thank You {ctx.author.mention} for submitting the necessary information, please check the Curator-Submission-Info Text Channel for further updates.")
                     await asyncio.sleep(3)
                     await channel_references[artist_channel_var].delete()
